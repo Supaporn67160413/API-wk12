@@ -1,0 +1,38 @@
+{
+  "name": "student-api",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon -e js,json,yaml server.js",
+    "db:setup": "docker exec -i mysql_db mysql -uroot -pchangeme_root_password --default-character-set=utf8mb4 < schema.sql && docker exec -i mysql_db mysql -uroot -pchangeme_root_password --default-character-set=utf8mb4 < seed.sql",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "test:legacy": "node test-results-wk02.mjs && node test-results-wk04.mjs && node test-results-wk05.mjs && node test-results-wk06.mjs && node test-results-wk07.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "ปฏิบัติการสัปดาห์ที่ 1: REST API เบื้องต้นด้วย Node.js และ Express",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-graphql": "^0.12.0",
+    "express-rate-limit": "^8.7.0",
+    "graphql": "^15.10.3",
+    "helmet": "^8.3.0",
+    "js-yaml": "^5.4.2",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.12.0",
+    "mysql2": "^3.24.2",
+    "redis": "^6.2.1",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "jest": "^30.5.2",
+    "nodemon": "^3.1.14",
+    "supertest": "^7.2.2"
+  }
+}
