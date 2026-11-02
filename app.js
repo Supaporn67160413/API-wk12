@@ -34,6 +34,11 @@ app.use(
 );
 app.use(morgan("dev"));
 app.use(express.json({ limit: "10kb" }));
+
+const { authLimiter, generalLimiter } = require("./middlewares/rateLimiter");
+app.set("trust proxy", 1);
+app.use(generalLimiter);
+
 app.use(requireJson); // แบบฝึกหัดต่อยอดข้อ 1: บังคับ Content-Type: application/json สำหรับ POST/PUT/PATCH
 
 app.get("/", (req, res) => {
@@ -45,6 +50,7 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openapiDocument));
 // สัปดาห์ที่ 7 แบบฝึกหัดข้อ 3: ทุก response ของ v1 แนบ header Deprecation + Link
 app.use("/api/v1", deprecationNotice);
 
+app.use("/api/v1/auth/login", authLimiter);
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/students/:id/enrollments", enrollments.nested);
 app.use("/api/v1/students", studentsRouter);
@@ -54,10 +60,7 @@ app.use("/api/v1/enrollments", enrollments.flat);
 // สัปดาห์ที่ 7 ขั้นตอนที่ 3.3: versioning
 app.use("/api/v2", v2Router);
 
-app.use(
-  "/graphql",
-  graphqlHTTP({ schema, rootValue: root, graphiql: true }),
-);
+app.use("/graphql", graphqlHTTP({ schema, rootValue: root, graphiql: true }));
 
 // 404: ไม่พบ route (หลัง route ทั้งหมด)
 app.use((req, res) => {

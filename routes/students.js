@@ -6,6 +6,8 @@ const { createStudentLimiter } = require("../lib/middleware");
 const { authenticateToken, authorizeRole } = require("../middlewares/auth");
 const { parsePagination, parseSort } = require("../middlewares/query-parser");
 const { redisClient } = require("../cache");
+const { getStudentEnrichment } = require("../services/enrichment-service");
+const { createStudentSchema } = require("../schemas/studentSchema");
 
 // สัปดาห์ที่ 7: ล้างแคชรายการนิสิตทุก key เมื่อข้อมูลเปลี่ยน (แบบฝึกหัดข้อ 2: key รวมพารามิเตอร์)
 async function invalidateStudentListCache() {
@@ -26,7 +28,9 @@ router.get("/", parsePagination, parseSort, async (req, res, next) => {
     const cached = await redisClient.get(cacheKey);
     if (cached) {
       const payload = JSON.parse(cached);
-      return res.status(200).json({ message: "สำเร็จ (จาก cache)", ...payload });
+      return res
+        .status(200)
+        .json({ message: "สำเร็จ (จาก cache)", ...payload });
     }
 
     let baseQuery = "SELECT * FROM students";
@@ -89,9 +93,10 @@ router.get("/:id", async (req, res, next) => {
 // แบบฝึกหัดต่อยอดสัปดาห์ที่ 5 ข้อ 1: รายวิชาของนิสิตด้วย JOIN เดียว
 router.get("/:id/courses", async (req, res, next) => {
   try {
-    const [students] = await pool.query("SELECT id FROM students WHERE id = ?", [
-      req.params.id,
-    ]);
+    const [students] = await pool.query(
+      "SELECT id FROM students WHERE id = ?",
+      [req.params.id],
+    );
     if (students.length === 0) {
       return sendError(res, 404, "NOT_FOUND", "ไม่พบข้อมูลนิสิต");
     }
@@ -103,6 +108,22 @@ router.get("/:id/courses", async (req, res, next) => {
       [req.params.id],
     );
     res.status(200).json({ message: "สำเร็จ", data: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// สัปดาห์ที่ 11: ข้อมูลเสริมจาก Public API ภายนอก
+router.get("/:id/enrichment", authenticateToken, async (req, res, next) => {
+  try {
+    const enrichment = await getStudentEnrichment(req.params.id);
+
+    return res.status(200).json({
+      data: {
+        studentId: req.params.id,
+        enrichment,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -124,12 +145,21 @@ function validateStudentBody(body) {
 
 // 3. POST: เพิ่มข้อมูลนิสิตใหม่ (rate limit จากสัปดาห์ที่ 4)
 router.post("/", createStudentLimiter, async (req, res, next) => {
-  const errMsg = validateStudentBody(req.body);
-  if (errMsg) {
-    return sendError(res, 400, "VALIDATION_ERROR", errMsg);
+  const validationResult = createStudentSchema.safeParse(req.body);
+  if (!validationResult.success) {
+    return res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "ข้อมูลที่ส่งมาไม่ถูกต้อง",
+        details: validationResult.error.issues.map((issue) => ({
+          field: issue.path.join("."),
+          message: issue.message,
+        })),
+      },
+    });
   }
 
-  const { name, major, email } = req.body;
+  const { name, major, email } = validationResult.data;
   try {
     const [result] = await pool.query(
       "INSERT INTO students (name, major, email) VALUES (?, ?, ?)",
@@ -179,9 +209,10 @@ router.put("/:id", authenticateToken, async (req, res, next) => {
       return sendError(res, 404, "NOT_FOUND", "ไม่พบข้อมูลนิสิต");
     }
     await invalidateStudentListCache();
-    res
-      .status(200)
-      .json({ message: "แก้ไขข้อมูลสำเร็จ", data: { id: Number(req.params.id), name, major, email } });
+    res.status(200).json({
+      message: "แก้ไขข้อมูลสำเร็จ",
+      data: { id: Number(req.params.id), name, major, email },
+    });
   } catch (err) {
     if (err.code === "ER_DUP_ENTRY") {
       return sendError(res, 409, "DUPLICATE_EMAIL", "อีเมลนี้มีอยู่ในระบบแล้ว");
@@ -224,19 +255,24 @@ router.patch("/:id", async (req, res, next) => {
 });
 
 // 6. DELETE: ลบข้อมูลนิสิต — สัปดาห์ที่ 6: ต้องล็อกอินและเป็น admin เท่านั้น
-router.delete("/:id", authenticateToken, authorizeRole("admin"), async (req, res, next) => {
-  try {
-    const [result] = await pool.query("DELETE FROM students WHERE id = ?", [
-      req.params.id,
-    ]);
-    if (result.affectedRows === 0) {
-      return sendError(res, 404, "NOT_FOUND", "ไม่พบข้อมูลนิสิต");
+router.delete(
+  "/:id",
+  authenticateToken,
+  authorizeRole("admin"),
+  async (req, res, next) => {
+    try {
+      const [result] = await pool.query("DELETE FROM students WHERE id = ?", [
+        req.params.id,
+      ]);
+      if (result.affectedRows === 0) {
+        return sendError(res, 404, "NOT_FOUND", "ไม่พบข้อมูลนิสิต");
+      }
+      await invalidateStudentListCache();
+      res.status(200).json({ message: "ลบข้อมูลสำเร็จ" });
+    } catch (err) {
+      next(err);
     }
-    await invalidateStudentListCache();
-    res.status(200).json({ message: "ลบข้อมูลสำเร็จ" });
-  } catch (err) {
-    next(err);
-  }
-});
+  },
+);
 
 module.exports = router;

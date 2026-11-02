@@ -174,7 +174,7 @@ npm run dev
 
 ### ขั้นตอนที่ 3.3 เพิ่มสคริปต์บันทึก Token อัตโนมัติ
 
-เปิด request `POST Login` ไปที่แท็บ **Tests** แล้วเพิ่ม
+เปิด request `POST Login` ไปที่แท็บ **Scripts > Post-response** (Postman เวอร์ชันใหม่เปลี่ยนชื่อจาก **Tests**) แล้วเพิ่ม
 
 ```javascript
 const response = pm.response.json();
@@ -193,10 +193,10 @@ pm.test("Response has token", function () {
 
 ### ขั้นตอนที่ 3.4 เพิ่ม Test Script ให้ทุก Request
 
-เพิ่มการทดสอบพื้นฐานในแท็บ **Tests** ของแต่ละ request อย่างน้อยตรวจสอบ status code ที่ถูกต้อง เช่น
+เพิ่มการทดสอบพื้นฐานในแท็บ **Scripts > Post-response** ของแต่ละ request อย่างน้อยตรวจสอบ status code ที่ถูกต้อง เช่น
 
 ```javascript
-// GET Students - Tests tab
+// GET Students - Scripts > Post-response
 pm.test("Status code is 200", function () {
   pm.response.to.have.status(200);
 });

@@ -26,13 +26,23 @@ describe("GET /api/v1/students", () => {
 
 describe("POST /api/v1/students", () => {
   test("ควรคืน 201 เมื่อข้อมูลถูกต้องและครบถ้วน", async () => {
+    // 1. จำลองการล็อกอินเพื่อเอา Token
+    const adminEmail = `adminpost${Date.now()}@example.com`;
+    const token = await registerAndLogin(adminEmail);
     const uniqueEmail = `student${Date.now()}@example.com`;
 
-    const response = await request(app).post("/api/v1/students").send({
-      name: "ทดสอบ ระบบ",
-      major: "วิศวกรรมซอฟต์แวร์",
-      email: uniqueEmail,
-    });
+    const response = await request(app)
+      .post("/api/v1/students")
+      .set("Authorization", `Bearer ${token}`) // 2. แนบ Token ไปด้วย
+      .send({
+        name: "ทดสอบ ระบบ",
+        major: "วิศวกรรมซอฟต์แวร์",
+        email: uniqueEmail,
+        // 3. เพิ่มฟิลด์ตามที่ Zod Schema ของอาจารย์ต้องการ
+        age: 20,
+        studentType: "local",
+        nationalId: "1349900000000",
+      });
 
     expect(response.status).toBe(201);
     expect(response.body.data).toHaveProperty("id");
@@ -40,10 +50,17 @@ describe("POST /api/v1/students", () => {
   });
 
   test("ควรคืน 400 เมื่อไม่ระบุ major", async () => {
-    const response = await request(app).post("/api/v1/students").send({
-      name: "ทดสอบ ไม่ครบ",
-      email: `incomplete${Date.now()}@example.com`,
-    });
+    // ต้องแนบ Token ให้ผ่าน Auth ไปให้ถึงด่าน Zod Validation ด้วย
+    const adminEmail = `adminpost2${Date.now()}@example.com`;
+    const token = await registerAndLogin(adminEmail);
+
+    const response = await request(app)
+      .post("/api/v1/students")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        name: "ทดสอบ ไม่ครบ",
+        email: `incomplete${Date.now()}@example.com`,
+      });
 
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe("VALIDATION_ERROR");
@@ -62,14 +79,23 @@ describe("PUT /api/v1/students/:id", () => {
 
     const [result] = await pool.query(
       "INSERT INTO students (name, major, email, user_id) VALUES (?, ?, ?, ?)",
-      ["เจ้าของ ระเบียน", "เทคโนโลยีสารสนเทศ", `owned${Date.now()}@example.com`, userId],
+      [
+        "เจ้าของ ระเบียน",
+        "เทคโนโลยีสารสนเทศ",
+        `owned${Date.now()}@example.com`,
+        userId,
+      ],
     );
     const studentId = result.insertId;
 
     const response = await request(app)
       .put(`/api/v1/students/${studentId}`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ name: "แก้ไขแล้ว", major: "เทคโนโลยีสารสนเทศ", email: `updated${Date.now()}@example.com` });
+      .send({
+        name: "แก้ไขแล้ว",
+        major: "เทคโนโลยีสารสนเทศ",
+        email: `updated${Date.now()}@example.com`,
+      });
 
     expect(response.status).toBe(200);
     expect(response.body.data.name).toBe("แก้ไขแล้ว");
@@ -80,14 +106,22 @@ describe("PUT /api/v1/students/:id", () => {
 
     const [result] = await pool.query(
       "INSERT INTO students (name, major, email) VALUES (?, ?, ?)",
-      ["ไม่มีเจ้าของ", "วิทยาการคอมพิวเตอร์", `noowner${Date.now()}@example.com`],
+      [
+        "ไม่มีเจ้าของ",
+        "วิทยาการคอมพิวเตอร์",
+        `noowner${Date.now()}@example.com`,
+      ],
     );
     const studentId = result.insertId;
 
     const response = await request(app)
       .put(`/api/v1/students/${studentId}`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ name: "พยายามแก้ไข", major: "วิทยาการคอมพิวเตอร์", email: `hacked${Date.now()}@example.com` });
+      .send({
+        name: "พยายามแก้ไข",
+        major: "วิทยาการคอมพิวเตอร์",
+        email: `hacked${Date.now()}@example.com`,
+      });
 
     expect(response.status).toBe(403);
     expect(response.body.error.code).toBe("FORBIDDEN");
@@ -99,7 +133,11 @@ describe("PUT /api/v1/students/:id", () => {
     const response = await request(app)
       .put("/api/v1/students/9999999")
       .set("Authorization", `Bearer ${token}`)
-      .send({ name: "ไม่มีจริง", major: "ไม่มีจริง", email: `ghost${Date.now()}@example.com` });
+      .send({
+        name: "ไม่มีจริง",
+        major: "ไม่มีจริง",
+        email: `ghost${Date.now()}@example.com`,
+      });
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
@@ -110,7 +148,9 @@ describe("DELETE /api/v1/students/:id", () => {
   test("ควรคืน 200 เมื่อ admin ลบข้อมูลสำเร็จ", async () => {
     const email = `admin${Date.now()}@example.com`;
     await registerAndLogin(email);
-    await pool.query("UPDATE users SET role = 'admin' WHERE email = ?", [email]);
+    await pool.query("UPDATE users SET role = 'admin' WHERE email = ?", [
+      email,
+    ]);
     const loginResponse = await request(app)
       .post("/api/v1/auth/login")
       .send({ email, password: "Passw0rd!" });
